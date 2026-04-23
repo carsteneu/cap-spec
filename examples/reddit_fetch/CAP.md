@@ -10,7 +10,7 @@ tags:
 runtime: repl
 tested: true
 requires:
-  - cap_store
+  - store
 ---
 
 ## Purpose
@@ -19,7 +19,7 @@ Fetch a Reddit post and extract structured data: post metadata, nested comments
 (with depth and threading), and unique external links categorized by domain
 (github/reddit/external).
 
-Data is also persisted into cap_store tables for later querying:
+Data is also persisted into store tables for later querying:
 - `posts` — one row per fetched post
 - `comments` — one row per comment, preserving depth and parent relationships
 - `links` — one row per unique external URL, with categorization
@@ -54,7 +54,7 @@ async ({url, max_comments}) => {
   // Read back chunks
   let rows = [];
   for (let i = 0; i < 50; i++) {
-    const r = await cap_store({
+    const r = await store({
       capability: 'reddit_fetch', action: 'query', table: 'blobs',
       where: 'key=? AND chunk_idx=?', args: JSON.stringify([key, i]), limit: 1
     });
@@ -95,19 +95,19 @@ async ({url, max_comments}) => {
             {name:'fetched_at',type:'INTEGER'}]
   };
   for (const [t, c] of Object.entries(cols)) {
-    await cap_store({capability:'reddit_fetch', action:'create_table', table:t,
+    await store({capability:'reddit_fetch', action:'create_table', table:t,
                      columns:JSON.stringify(c)});
   }
 
   // Clear old data for this post
   for (const t of ['posts','comments','links']) {
     const w = t === 'posts' ? 'permalink=?' : 'post_permalink=?';
-    await cap_store({capability:'reddit_fetch', action:'delete', table:t,
+    await store({capability:'reddit_fetch', action:'delete', table:t,
                      where:w, args:JSON.stringify([permalink])});
   }
 
   // Store post
-  await cap_store({capability:'reddit_fetch', action:'upsert', table:'posts',
+  await store({capability:'reddit_fetch', action:'upsert', table:'posts',
     data:JSON.stringify({
       permalink, subreddit:postData.subreddit||'', author:postData.author||'[deleted]',
       title:postData.title||'', body:postData.selftext||'', score:postData.score||0,
@@ -165,11 +165,11 @@ async ({url, max_comments}) => {
 
   // Persist comments and links
   for (const row of commentRows) {
-    await cap_store({capability:'reddit_fetch', action:'upsert', table:'comments',
+    await store({capability:'reddit_fetch', action:'upsert', table:'comments',
                      data:JSON.stringify(row)});
   }
   for (const row of linkRows) {
-    await cap_store({capability:'reddit_fetch', action:'upsert', table:'links',
+    await store({capability:'reddit_fetch', action:'upsert', table:'links',
                      data:JSON.stringify(row)});
   }
 

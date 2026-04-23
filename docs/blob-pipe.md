@@ -1,6 +1,6 @@
 # Blob Pipe: Handling Large Payloads
 
-AI coding assistant runtimes typically have output size limits on shell commands (commonly ~30KB). The blob pipe pattern bypasses this by streaming large payloads directly into cap_store's blob storage, then reading them back programmatically.
+AI coding assistant runtimes typically have output size limits on shell commands (commonly ~30KB). The blob pipe pattern bypasses this by streaming large payloads directly into the store primitive's blob storage, then reading them back programmatically.
 
 ## The Problem
 
@@ -20,10 +20,10 @@ const putResult = await sh(
     20000
 );
 
-// 2. Read back in chunks via cap_store
+// 2. Read back in chunks via store
 let chunks = [];
 for (let i = 0; i < 100; i++) {
-    const r = await cap_store({
+    const r = await store({
         capability: 'my_cap',
         action: 'query',
         table: 'blobs',
@@ -44,7 +44,7 @@ const data = JSON.parse(fullPayload);
 ## How It Works
 
 ```
-curl (stdout)  →  blob_put (stdin)  →  cap_store blobs table
+curl (stdout)  →  blob_put (stdin)  →  store blobs table
                                         ┌──────────────────┐
                                         │ key   │ chunk_idx │
                                         │───────│───────────│
@@ -87,7 +87,7 @@ Always delete old blob data before writing new data for the same key:
 
 ```javascript
 // Delete old chunks first
-await cap_store({
+await store({
     capability: 'my_cap',
     action: 'delete',
     table: 'blobs',

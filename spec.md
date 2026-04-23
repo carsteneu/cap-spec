@@ -46,7 +46,7 @@ YAML block between `---` delimiters. Contains tool metadata.
 | `scope` | `"user"` \| `"project"` | `"user"` | Visibility scope. User-scoped caps are available everywhere; project-scoped only in that project. |
 | `tested` | boolean | `false` | Whether the handler has been verified working. |
 | `auto_active` | boolean | `false` | When true, tool is activated automatically at session start. |
-| `requires` | string[] | Auto-detected | Generic adapter functions used by the script (e.g., `["cap_store", "blob_put"]`). |
+| `requires` | string[] | Auto-detected | Adapter primitives used by the script (e.g., `["store", "web"]`). |
 
 ### Runtime Detection
 
@@ -57,11 +57,15 @@ If `runtime` is not specified, it is inferred from the first code block in the S
 
 ### Requires Detection
 
-If `requires` is not specified, parsers scan the Script section for calls to adapter functions:
+If `requires` is not specified, parsers scan the Script section for calls to adapter primitives:
 
-- `cap_store(` → adds `"cap_store"`
-- `blob_put(` → adds `"blob_put"`
-- `blob_get(` → adds `"blob_get"`
+- `store(` → adds `"store"`
+- `web(` → adds `"web"`
+- `file(` → adds `"file"`
+
+### Schema Derivation
+
+The `schema` is derived from the JavaScript function signature. `async ({ subreddit, topic, limit = 25 }) => { ... }` yields three properties — `subreddit` and `topic` required, `limit` optional with default 25. For stricter validation, the schema can be set explicitly in frontmatter.
 
 ## 2. Purpose Section
 
@@ -80,6 +84,10 @@ Starts with `## Script`. Contains exactly one fenced code block with the executa
 
 ### REPL Runtime (`runtime: repl`)
 
+> **Prerequisite:** The REPL VM must be enabled in your AI coding assistant. In Claude Code, set `CLAUDE_CODE_REPL=true` in the `env` block of your `settings.json`. See the [Claude Code REPL documentation](https://docs.anthropic.com/en/docs/claude-code) for details.
+>
+> **Tool availability:** Enabling REPL mode changes the tool landscape. Classic tools (`Read`, `Bash`, `Grep`, `Glob`) become REPL-internal shorthands (`cat()`, `sh()`, `rg()`, `gl()`). `Edit` and `Write` remain available as top-level tools. Cap scripts run inside the REPL VM and have access to all shorthands plus adapter primitives.
+
 The script is a JavaScript async function expression. It receives a single destructured parameter object:
 
 ```javascript
@@ -90,11 +98,11 @@ async ({ param1, param2, optionalParam }) => {
 ```
 
 **Conventions:**
-- Always async — adapter functions are async
+- Always async — adapter primitives (`store`, `web`, `file`) are async
 - Single parameter object, destructured in signature
 - Returns a plain object (JSON-serializable)
 - Error case: return `{ error: "message", ...details }` instead of throwing
-- Use adapter functions for storage (see [adapters.md](adapters.md))
+- Use adapter primitives for persistence, network, and file I/O (see [adapters.md](adapters.md))
 
 ### Bash Runtime (`runtime: bash`)
 
@@ -108,6 +116,16 @@ git log --all --since=midnight --pretty=format:'%h %an %s'
 - Receives parameters as environment variables: `$PARAM1`, `$PARAM2`
 - Output to stdout is the return value
 - Non-zero exit code signals error
+
+### Headless / Automation
+
+Caps work in non-interactive (headless) mode. In Claude Code, `claude -p "prompt"` loads the full MCP configuration including REPL, adapter primitives, and all registered caps. This enables:
+
+- **Scheduled tasks / cron jobs** — run caps on a timer without an interactive session
+- **Pipeline integration** — pipe prompts through `claude -p` in shell scripts
+- **Daemon-driven execution** — a background service can invoke caps via `claude -p --project-dir <dir>`
+
+Headless sessions have the same cap access as interactive sessions. The only difference is the absence of user interaction — the cap runs to completion and exits.
 
 ## 4. Database Section
 
@@ -185,3 +203,10 @@ Each capability lives in its own directory. The directory name must match the `n
 5. The first code block in the Database section (if any) contains the schema
 6. Unknown sections are preserved but not interpreted
 7. Markdown formatting within sections is preserved verbatim
+
+## What Doesn't Belong in the Format
+
+- **Tests** — belong in the script itself or in a separate test harness
+- **Dependencies** — caps use the runtime's built-in utilities; if more is needed, use a classic plugin/skill
+- **Permissions** — derived from `runtime` and script content at parse time
+- **Author** — source attribution is handled by runtime metadata, not the cap file

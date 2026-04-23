@@ -1,6 +1,6 @@
-# cap_store: Per-Capability Database
+# store: Per-Capability Database
 
-Capabilities can store structured data persistently using the `cap_store` adapter function. Each capability gets its own namespace — tables from one cap never collide with another.
+Capabilities can store structured data persistently using the `store` adapter primitive. Each capability gets its own namespace — tables from one cap never collide with another.
 
 ## Table Naming Convention
 
@@ -17,7 +17,7 @@ The double underscore `__` separates namespace from table name. Example: capabil
 Creates a table if it doesn't exist. Columns are specified as a JSON array of `{name, type}` objects.
 
 ```javascript
-await cap_store({
+await store({
     capability: 'my_cap',
     action: 'create_table',
     table: 'items',
@@ -38,7 +38,7 @@ SQLite types: `TEXT`, `INTEGER`, `REAL`, `BLOB`.
 Insert or update a row. Pass data as a JSON object. Include `id` to update an existing row.
 
 ```javascript
-await cap_store({
+await store({
     capability: 'my_cap',
     action: 'upsert',
     table: 'items',
@@ -51,7 +51,7 @@ await cap_store({
 Read rows with optional filtering and pagination.
 
 ```javascript
-const result = await cap_store({
+const result = await store({
     capability: 'my_cap',
     action: 'query',
     table: 'items',
@@ -70,7 +70,7 @@ The `where` clause uses SQLite syntax with `?` placeholders. Bind values are pas
 Remove rows matching a condition.
 
 ```javascript
-await cap_store({
+await store({
     capability: 'my_cap',
     action: 'delete',
     table: 'items',
@@ -86,7 +86,7 @@ Omitting `where` deletes all rows in the table.
 List all tables belonging to a capability.
 
 ```javascript
-const tables = await cap_store({
+const tables = await store({
     capability: 'my_cap',
     action: 'list_tables'
 });

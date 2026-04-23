@@ -1,121 +1,134 @@
 # Adapter System
 
-CAP.md scripts use **generic function names** for storage operations. Each runtime provider maps these to its own implementation. This makes caps portable across different AI tool platforms.
+Adapters are the portability layer of the CAP.md format. A capability script uses **3 generic primitive functions** instead of provider-specific tool calls. Each provider maps these primitives to its own implementation at activation time.
 
-## Adapter Functions
+## The 3 Primitives
 
-Scripts call these generic names:
+Every adapter is action-based: one function, multiple operations via the `action` parameter.
 
-| Generic Name | Purpose |
-|-------------|---------|
-| `cap_store(args)` | CRUD operations on per-cap database tables |
-| `blob_put(args)` | Store large payloads (>30KB) in chunked blob storage |
-| `blob_get(args)` | Retrieve chunked blob data |
+### `store(...)` — Persistence
 
-## How Adapters Work
+All data operations: structured tables and large blob storage.
 
-```
-CAP.md script          Adapter layer           Provider API
-──────────────         ─────────────           ────────────
-cap_store(...)    →    mapping table     →    mcp__yesmem__cap_store(...)
-blob_put(...)     →    mapping table     →    mcp__yesmem__blob_put(...)
-blob_get(...)     →    mapping table     →    mcp__yesmem__blob_get(...)
-```
-
-The adapter layer is a simple name-mapping table. No logic transformation — the function signatures and parameters are identical on both sides. Only the name changes.
-
-## Provider Mapping Example
-
-A provider registers its adapter table at startup:
-
-```
-Generic Name  →  Provider-Specific Name
-────────────     ──────────────────────
-cap_store     →  mcp__yesmem__cap_store
-blob_put      →  mcp__yesmem__blob_put
-blob_get      →  mcp__yesmem__blob_get
-```
-
-A different provider (e.g., a Python-based memory system) would map to its own API:
-
-```
-Generic Name  →  Provider-Specific Name
-────────────     ──────────────────────
-cap_store     →  pymem.store
-blob_put      →  pymem.blob_write
-blob_get      →  pymem.blob_read
-```
-
-## Bidirectional Mapping
-
-The adapter works in both directions:
-
-**On save (inbound):** Provider-specific names in the script → converted to generic names before storage.
-A script written as `mcp__yesmem__cap_store(...)` is normalized to `cap_store(...)` in the stored CAP.md.
-
-**On activate (outbound):** Generic names in the stored CAP.md → converted to provider-specific names before delivery to the runtime.
-`cap_store(...)` becomes `mcp__yesmem__cap_store(...)` when loaded into a YesMem session.
-
-This means:
-- The canonical CAP.md always uses generic names
-- Scripts work regardless of which provider originally created them
-- Migrating between providers requires zero changes to the CAP.md file
-
-## Writing Portable Scripts
-
-Use generic names in your scripts:
+| Action | Description |
+|--------|-------------|
+| `create_table` | Create a table with given columns |
+| `upsert` | Insert or update a row |
+| `query` | Read rows with optional WHERE clause |
+| `delete` | Remove rows |
+| `list_tables` | List all tables for this capability |
+| `blob_put` | Store large data (>30KB) in chunks |
+| `blob_get` | Retrieve chunked blob data |
 
 ```javascript
-// Portable — works with any provider
-async ({ cap, table, where }) => {
-    const result = await cap_store({
-        capability: cap,
-        action: 'query',
-        table: table,
-        where: where
-    });
-    return result;
-}
+// Structured data
+await store({ capability: 'my_cap', action: 'upsert', table: 'hits',
+  data: { post_id: '123', title: 'Hello', score: 42 } });
+
+// Query with filter
+const rows = await store({ capability: 'my_cap', action: 'query', table: 'hits',
+  where: 'score > ?', args: '[10]', limit: 50 });
+
+// Large payload
+await store({ capability: 'my_cap', action: 'blob_put', table: 'blobs',
+  data: JSON.stringify(largeObject) });
 ```
 
-Avoid provider-specific names:
+### `web(...)` — Network I/O
+
+HTTP requests and web search.
+
+| Action | Description |
+|--------|-------------|
+| `fetch` | Fetch a URL, return raw content |
+| `search` | Web search, return results |
 
 ```javascript
-// NOT portable — tied to YesMem
-async ({ cap, table, where }) => {
-    const result = await mcp__yesmem__cap_store({  // ← don't do this
-        capability: cap,
-        action: 'query',
-        table: table,
-        where: where
-    });
-    return result;
-}
+// Fetch a page
+const page = await web({ action: 'fetch', url: 'https://example.com/api/data',
+  prompt: 'Extract the version number' });
+
+// Search the web
+const results = await web({ action: 'search', query: 'CAP.md format specification' });
 ```
 
-The adapter layer normalizes provider-specific names on save, so existing scripts with provider names still work — but new scripts should use generic names from the start.
+### `file(...)` — Filesystem I/O
 
-## cap_store API
+Local file operations.
 
-The `cap_store` function supports these actions:
+| Action | Description |
+|--------|-------------|
+| `read` | Read file content |
+| `write` | Write content to a file |
+| `glob` | Find files matching a pattern |
 
-| Action | Required Params | Description |
-|--------|----------------|-------------|
-| `create_table` | `capability`, `table`, `columns` (JSON array of `{name, type}`) | Create a namespaced table |
-| `upsert` | `capability`, `table`, `data` (JSON object) | Insert or update a row |
-| `query` | `capability`, `table` | Query rows (optional: `where`, `args`, `limit`, `offset`) |
-| `delete` | `capability`, `table` | Delete rows (optional: `where`, `args`) |
-| `list_tables` | `capability` | List all tables for this capability |
+```javascript
+// Read a file
+const content = await file({ action: 'read', path: '/home/user/data.json' });
 
-Tables are automatically namespaced: `cap_<capability>__<table>`.
+// Write a file
+await file({ action: 'write', path: '/tmp/report.md', content: reportText });
 
-## Implementing a Provider
+// Find files
+const matches = await file({ action: 'glob', pattern: 'src/**/*.ts' });
+```
 
-To support CAP.md in a new system:
+## What is NOT an Adapter
 
-1. Implement the three adapter functions (`cap_store`, `blob_put`, `blob_get`) in your runtime
-2. Register a mapping table: generic name → your implementation
-3. On cap load: replace generic names in the script with your function names
-4. On cap save: replace your function names with generic names
+Runtime builtins are always available regardless of provider. They are not adapters:
 
-The rest — frontmatter parsing, section extraction, script execution — follows the [spec](spec.md).
+| Builtin | Purpose |
+|---------|---------|
+| `sh(cmd)` | Shell execution |
+| `haiku(prompt, schema?)` | LLM inference |
+| `log(...)` | Console output |
+| `JSON.parse/stringify` | Serialization |
+
+These are part of the execution environment, not the portability layer.
+
+## Provider Mapping
+
+Each provider registers a mapping from generic primitives to its own implementation:
+
+### YesMem (Reference Implementation)
+
+| Primitive | Provider Implementation |
+|-----------|----------------------|
+| `store(...)` | `mcp__yesmem__cap_store(...)` |
+| `web({ action: 'fetch' })` | `sh('curl -sL --max-time 20 ' + shQuote(url))` |
+| `web({ action: 'search' })` | `WebSearch(...)` |
+| `file({ action: 'read' })` | `cat(path)` |
+| `file({ action: 'write' })` | `put(path, content)` |
+| `file({ action: 'glob' })` | `gl(pattern, path)` |
+
+### Other Providers
+
+A minimal provider needs only to implement the 3 functions:
+
+```javascript
+// Provider registration (pseudocode)
+registerAdapter('store', async (params) => {
+  // route params.action to your storage backend
+});
+registerAdapter('web', async (params) => {
+  // route params.action to your HTTP client
+});
+registerAdapter('file', async (params) => {
+  // route params.action to your filesystem API
+});
+```
+
+## Roundtrip Flow
+
+1. **Save** (`ProviderToGeneric`): when saving a cap, provider-specific calls in the script are replaced with generic names. `mcp__yesmem__cap_store(` → `store(`
+2. **Store**: the CAP.md file on disk always contains generic names only.
+3. **Activate** (`GenericToProvider`): when loading a cap for execution, generic names are replaced with the current provider's implementation. `store(` → `mcp__yesmem__cap_store(`
+
+This ensures caps are portable: a cap written in YesMem can be activated in any provider that implements the 3 primitives.
+
+## Design Principles
+
+- **Action-based dispatch**: one function per I/O category, actions via parameter. Not one function per operation.
+- **Minimal surface**: 3 primitives cover all I/O categories (persistence, network, filesystem). Everything else is a runtime builtin.
+- **No adapter for inference**: `haiku()` stays a runtime builtin. LLM calls are not provider-portable in the same way — model names, parameters, and capabilities differ too much.
+- **No adapter for shell**: `sh()` is universal. Every execution environment has shell access.

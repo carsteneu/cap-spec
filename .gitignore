@@ -8,3 +8,7 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+
+# Claude Code
+CLAUDE.md
+.claude/

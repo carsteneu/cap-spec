@@ -1,9 +1,9 @@
 ---
 name: cap_search
-description: Generic search over any cap_store table with optional auto-pagination.
+description: Generic search over any store table with optional auto-pagination.
 version: 3
 tags:
-  - cap_store
+  - store
   - search
   - query
   - generic
@@ -13,7 +13,7 @@ auto_active: true
 
 ## Purpose
 
-Search any capability's stored data. Wraps `cap_store` query with sane defaults
+Search any capability's stored data. Wraps `store` query with sane defaults
 and optional auto-pagination. Returns `{rows, count, total, has_more, next_offset}`.
 
 Use when you need to find rows in a cap's tables: "find all reddit posts with
@@ -30,7 +30,7 @@ async ({cap, table, where, args, limit, offset, all, max_rows}) => {
   const lim = (typeof limit === 'number' && limit > 0) ? limit : 100;
   const argsJson = Array.isArray(args) ? JSON.stringify(args) : (args || '[]');
   if (!all) {
-    const r = await cap_store({
+    const r = await store({
       capability: cap, action: 'query', table,
       where: where || '', args: argsJson,
       limit: lim, offset: offset || 0
@@ -41,7 +41,7 @@ async ({cap, table, where, args, limit, offset, all, max_rows}) => {
   let rows = [], off = 0, total = 0;
   while (rows.length < capRows) {
     const pageLim = Math.min(100, capRows - rows.length);
-    const r = await cap_store({
+    const r = await store({
       capability: cap, action: 'query', table,
       where: where || '', args: argsJson,
       limit: pageLim, offset: off

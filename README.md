@@ -15,7 +15,7 @@ A CAP.md file defines a single tool that an AI coding assistant can use. It cont
 
 AI coding tools (Claude Code, Cursor, Windsurf, Codex) can use custom tools, but each platform has its own format. CAP.md provides a shared spec so tools can be written once and used anywhere.
 
-The key insight is the **adapter layer**: scripts use generic function names (`cap_store`, `blob_put`, `blob_get`) that each platform maps to its own API. The CAP.md file stays the same — only the adapter mapping changes.
+The key insight is the **adapter layer**: scripts use 3 generic primitives (`store`, `web`, `file`) that each platform maps to its own API. The CAP.md file stays the same — only the adapter mapping changes.
 
 ## Quick Start
 
@@ -44,11 +44,35 @@ async ({ name }) => {
 
 ````
 
+## Prerequisites
+
+For `runtime: repl` capabilities, the AI coding assistant must support a JavaScript REPL VM.
+
+**Claude Code:** Set `CLAUDE_CODE_REPL=true` in the `env` block of your `settings.json`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_REPL": "true"
+  }
+}
+```
+
+See the [Claude Code REPL documentation](https://docs.anthropic.com/en/docs/claude-code) for setup details.
+
+**Tool availability under REPL mode:** Classic tools (`Read`, `Bash`, `Grep`, `Glob`) become REPL-internal shorthands (`cat()`, `sh()`, `rg()`, `gl()`). `Edit` and `Write` remain top-level. Cap scripts run inside the REPL VM with access to all shorthands plus adapter primitives.
+
+For `runtime: bash` capabilities, no special configuration is needed.
+
+### Headless / Automation
+
+Caps work in non-interactive mode. `claude -p "prompt"` loads the full MCP configuration — REPL, adapters, and all registered caps are available. This enables scheduled tasks, cron jobs, and pipeline integration without an interactive session.
+
 ## Documentation
 
 - [spec.md](spec.md) — Full specification
 - [adapters.md](adapters.md) — Adapter system and portability
-- [docs/cap-store.md](docs/cap-store.md) — cap_store API reference
+- [docs/store.md](docs/store.md) — store primitive API reference
 - [docs/blob-pipe.md](docs/blob-pipe.md) — Handling large payloads
 
 ## Examples
@@ -61,8 +85,8 @@ async ({ name }) => {
 
 [YesMem](https://github.com/carsteneu/yesmem) implements the CAP.md spec with:
 - Parser and writer (`internal/capfile/`)
-- Adapter layer with bidirectional name mapping
-- `cap_store` backed by SQLite
+- Adapter layer with bidirectional name mapping for 3 primitives (`store`, `web`, `file`)
+- `store` backed by SQLite
 - Blob pipe via chunked storage
 
 ## License
