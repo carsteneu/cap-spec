@@ -21,9 +21,12 @@ A CAP.md file is a Markdown document with YAML frontmatter that defines a single
 
 ## Database
 <optional: SQL schema for persistent storage>
+
+## Actions
+<optional: named subsections for setup, upgrade, etc.>
 ```
 
-All four sections are parsed by position and heading name. Additional Markdown content outside these sections is ignored by parsers but preserved for human readers.
+Purpose, Script, and Database are parsed by position and heading name. Actions is optional and contains `### <Name>` subsections. Additional Markdown content outside these sections is ignored by parsers but preserved for human readers.
 
 ## 1. Frontmatter
 
@@ -184,6 +187,66 @@ If a cap uses no persistent storage, include the heading with empty content:
 
 This signals explicitly that the cap is stateless.
 
+## 5. Actions Section
+
+The optional `## Actions` section contains named subsections (`### <Name>`) that define provider-triggered workflows. Each subsection is a free-text block of instructions that the runtime can present to the user or agent at the appropriate time.
+
+```markdown
+## Actions
+
+### Setup
+
+To use this cap, you need a Telegram Bot Token:
+
+1. Open @BotFather in Telegram
+2. Send /newbot and follow the prompts
+3. Copy the token and run:
+
+store({ action: 'upsert', table: 'config', data: { key: 'telegram_bot_token', value: '<YOUR_TOKEN>' } })
+
+After setup, this cap will stop showing these instructions.
+```
+
+### Structure
+
+- The section heading is `## Actions` (case-sensitive)
+- Each subsection is identified by a `### <Name>` heading
+- Subsection content is everything between one `### ` heading and the next (or the end of `## Actions`)
+- Content is preserved verbatim, including Markdown formatting and inline code
+
+The parsed result is a map of subsection names to their content:
+
+```
+Actions["Setup"] = "To use this cap, you need a Telegram Bot Token:\n\n1. Open @BotFather..."
+Actions["Upgrade"] = "..."
+```
+
+### The Setup Convention
+
+`### Setup` is the first standardized action. It contains human-readable instructions that guide a user through first-time configuration (API keys, credentials, external accounts).
+
+**Lifecycle:**
+
+1. When a cap with `### Setup` is activated and no `_setup_complete` flag exists, the runtime displays the setup instructions
+2. The user follows the instructions (stores credentials, creates accounts, etc.)
+3. When setup is done, the runtime sets a completion flag in cap_store:
+   ```javascript
+   store({ action: 'upsert', table: 'config',
+           data: { key: '<cap_name>_setup_complete', value: '1' } })
+   ```
+4. On subsequent activations, the runtime checks the flag and skips the setup block
+
+**Rules for Setup content:**
+
+- Instructions are free-text Markdown, not a machine-parsed schema
+- Any `store()` calls in the instructions are examples for the user/agent to execute, not auto-run code
+- The `_setup_complete` flag name follows the pattern `<cap_name>_setup_complete`
+- A cap without `### Setup` has no first-run flow; it works immediately after activation
+
+### Custom Actions
+
+Beyond `### Setup`, cap authors can define arbitrary actions via additional `### <Name>` subsections. These are not interpreted by the runtime unless a provider explicitly supports them. They serve as documentation or as hooks for future provider features.
+
 ## File System Layout
 
 ```
@@ -201,8 +264,9 @@ Each capability lives in its own directory. The directory name must match the `n
 3. Code blocks are extracted from within their section by matching ` ``` ` fences
 4. The first code block in the Script section is the handler
 5. The first code block in the Database section (if any) contains the schema
-6. Unknown sections are preserved but not interpreted
-7. Markdown formatting within sections is preserved verbatim
+6. The Actions section is parsed into a `map[string]string` of `### <Name>` subsections to their content
+7. Unknown sections are preserved but not interpreted
+8. Markdown formatting within sections is preserved verbatim
 
 ## What Doesn't Belong in the Format
 
