@@ -43,6 +43,8 @@ async ({ name }) => {
 
 ## Database
 
+## Actions
+
 ````
 
 ## Prerequisites
