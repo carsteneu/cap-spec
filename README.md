@@ -10,6 +10,7 @@ A CAP.md file defines a single tool that an AI coding assistant can use. It cont
 - **Purpose** — what the tool does and when to use it
 - **Script** — executable code (JavaScript or Bash)
 - **Database** — optional SQL schema for persistent storage
+- **Actions** — optional named workflows (e.g. `### Setup` for first-run configuration)
 
 ## Why?
 
@@ -80,6 +81,7 @@ Caps work in non-interactive mode. `claude -p "prompt"` loads the full MCP confi
 - [deploy](examples/deploy/) — Simple bash capability (build & deploy)
 - [cap_search](examples/cap_search/) — Generic database query tool
 - [reddit_fetch](examples/reddit_fetch/) — Complex capability with blob pipe, comment parsing, and persistent storage
+- [telegram](examples/telegram/) — Telegram bot with Actions/Setup first-run flow
 
 ## Reference Implementation
 
