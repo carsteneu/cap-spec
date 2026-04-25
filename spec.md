@@ -1,10 +1,10 @@
 # CAP.md Format Specification
 
-Version: 1.0-draft
+Version: 1.1-draft
 
 ## Overview
 
-A CAP.md file is a Markdown document with YAML frontmatter that defines a single reusable tool (capability). It is designed to be read by both humans and AI assistants, enabling any LLM-based coding tool to parse the definition and execute or translate it.
+A CAP.md file is a Markdown document with YAML frontmatter that defines a reusable tool (capability). A capability exposes one or more named scripts that share state (database tables) and lifecycle (setup, upgrade actions). It is designed to be read by both humans and AI assistants, enabling any LLM-based coding tool to parse the definition and execute or translate it.
 
 ## File Structure
 
@@ -14,19 +14,25 @@ A CAP.md file is a Markdown document with YAML frontmatter that defines a single
 ---
 
 ## Purpose
-<what the tool does, when to use it>
+<what the capability does, when to use it>
 
-## Script
-<code block with the executable logic>
+## Scripts
+### <script_name_a>
+<inline metadata>
+<code block>
+
+### <script_name_b>
+<inline metadata>
+<code block>
 
 ## Database
-<optional: SQL schema for persistent storage>
+<optional: SQL schema for persistent storage shared by all scripts>
 
 ## Actions
 <optional: named subsections for setup, upgrade, etc.>
 ```
 
-Purpose, Script, and Database are parsed by position and heading name. Actions is optional and contains `### <Name>` subsections. Additional Markdown content outside these sections is ignored by parsers but preserved for human readers.
+Purpose, Scripts, Database, and Actions are parsed by position and heading name. Scripts contains one or more `### <name>` subsections, each a callable function. Database and Actions are optional. Additional Markdown content outside these sections is ignored by parsers but preserved for human readers.
 
 ## 1. Frontmatter
 
@@ -45,30 +51,33 @@ YAML block between `---` delimiters. Contains tool metadata.
 |-------|------|---------|-------------|
 | `version` | integer | `1` | Auto-incremented on save. Tracks revisions. |
 | `tags` | string[] | `[]` | Categorization tags for filtering and discovery. |
-| `runtime` | `"repl"` \| `"bash"` | Detected from script language | Execution environment. |
 | `scope` | `"user"` \| `"project"` | `"user"` | Visibility scope. User-scoped caps are available everywhere; project-scoped only in that project. |
-| `tested` | boolean | `false` | Whether the handler has been verified working. |
-| `auto_active` | boolean | `false` | When true, tool is activated automatically at session start. |
-| `requires` | string[] | Auto-detected | Adapter primitives used by the script (e.g., `["store", "web"]`). |
+| `tested` | boolean | `false` | Whether the cap has been verified working. |
+| `auto_active` | boolean | `false` | When true, the cap's tool-kind scripts are activated automatically at session start. |
+| `requires` | string[] | Auto-detected | Adapter primitives used by any script in the cap (e.g., `["store", "web"]`). |
 
-### Runtime Detection
+> Note: `runtime` and `schema` are per-script, not cap-level. See [Script Metadata](#script-metadata) below.
 
-If `runtime` is not specified, it is inferred from the first code block in the Script section:
+### Runtime Detection (per script)
+
+Each script's runtime is inferred from its code fence language tag:
 
 - ` ```javascript` or ` ```js` → `repl`
 - ` ```bash` or ` ```sh` → `bash`
 
+Inline `runtime:` metadata between the `### <name>` heading and the code fence overrides detection (rarely needed).
+
 ### Requires Detection
 
-If `requires` is not specified, parsers scan the Script section for calls to adapter primitives:
+If `requires` is not specified at the cap level, parsers scan all scripts for adapter primitive calls:
 
 - `store(` → adds `"store"`
 - `web(` → adds `"web"`
 - `file(` → adds `"file"`
 
-### Schema Derivation
+### Schema Derivation (per tool-script)
 
-The `schema` is derived from the JavaScript function signature. `async ({ subreddit, topic, limit = 25 }) => { ... }` yields three properties — `subreddit` and `topic` required, `limit` optional with default 25. For stricter validation, the schema can be set explicitly in frontmatter.
+For tool-kind scripts in REPL runtime, the JSON schema is derived from the JavaScript function signature. `async ({ subreddit, topic, limit = 25 }) => { ... }` yields three properties — `subreddit` and `topic` required, `limit` optional with default 25. For stricter validation, set `schema:` as inline metadata on the script.
 
 ## 2. Purpose Section
 
@@ -81,9 +90,71 @@ Starts with `## Purpose`. Free-form Markdown describing:
 
 This section is the primary documentation for both human readers and AI assistants deciding whether to use the tool.
 
-## 3. Script Section
+## 3. Scripts Section
 
-Starts with `## Script`. Contains exactly one fenced code block with the executable logic.
+Starts with `## Scripts`. Contains one or more named `### <name>` subsections, each defining a callable function. All scripts in a cap share the same `## Database` schema and `## Actions` lifecycle.
+
+### Single-Script Cap
+
+Most caps expose exactly one function. By convention the script name matches the cap name:
+
+````markdown
+## Scripts
+
+### reddit_fetch
+kind: tool
+
+```javascript
+async ({ url }) => { ... }
+```
+````
+
+### Bundle Cap (Multi-Script)
+
+A cap can bundle multiple related functions sharing data tables and configuration. Each function is a `### <name>` subsection. Different scripts may use different runtimes within the same cap.
+
+````markdown
+## Scripts
+
+### telegram_send
+kind: tool
+
+```bash
+curl -s -X POST "https://api.telegram.org/bot$TOKEN/sendMessage" ...
+```
+
+### telegram_poll
+kind: handler
+
+```bash
+... poll updates from getUpdates ...
+```
+
+### telegram_reply
+kind: handler
+
+```bash
+... reply to unprocessed messages ...
+```
+````
+
+### Script Metadata
+
+Between the `### <name>` heading and the code fence, optional `key: value` lines define per-script behavior:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `kind` | `"tool"` \| `"handler"` | `"tool"` | How the script is invoked. **Tools** are registered as MCP tools and called by AI assistants. **Handlers** run via the scheduler/cron and are not exposed to AI assistants. |
+| `runtime` | `"repl"` \| `"bash"` | derived from code fence | Execution environment. Override only when the code fence cannot disambiguate (rare). |
+| `schema` | JSON | derived from JS signature | JSON Schema for tool input parameters. Tool-kind scripts only. |
+
+### Script Naming
+
+Script names follow cap name rules: lowercase, digits, underscores; must start with a letter.
+
+For **tool**-kind scripts, the name becomes the MCP tool identifier (e.g., `reddit_fetch`, `telegram_send`). Within one cap, all script names must be unique.
+
+For **handler**-kind scripts, the name is the reference used by the scheduler in the `cap_handler` field of a scheduled job.
 
 ### REPL Runtime (`runtime: repl`)
 
@@ -91,7 +162,7 @@ Starts with `## Script`. Contains exactly one fenced code block with the executa
 >
 > **Tool availability:** Enabling REPL mode changes the tool landscape. Classic tools (`Read`, `Bash`, `Grep`, `Glob`) become REPL-internal shorthands (`cat()`, `sh()`, `rg()`, `gl()`). `Edit` and `Write` remain available as top-level tools. Cap scripts run inside the REPL VM and have access to all shorthands plus adapter primitives.
 
-The script is a JavaScript async function expression. It receives a single destructured parameter object:
+A REPL script is a JavaScript async function expression. It receives a single destructured parameter object:
 
 ```javascript
 async ({ param1, param2, optionalParam }) => {
@@ -109,7 +180,7 @@ async ({ param1, param2, optionalParam }) => {
 
 ### Bash Runtime (`runtime: bash`)
 
-The script is a shell command or script:
+A bash script is a shell command or script:
 
 ```bash
 git log --all --since=midnight --pretty=format:'%h %an %s'
@@ -119,12 +190,13 @@ git log --all --since=midnight --pretty=format:'%h %an %s'
 - Receives parameters as environment variables: `$PARAM1`, `$PARAM2`
 - Output to stdout is the return value
 - Non-zero exit code signals error
+- Handler-kind bash scripts have access to `store` (CLI binding) for adapter primitives but no MCP runtime
 
 ### Headless / Automation
 
 Caps work in non-interactive (headless) mode. In Claude Code, `claude -p "prompt"` loads the full MCP configuration including REPL, adapter primitives, and all registered caps. This enables:
 
-- **Scheduled tasks / cron jobs** — run caps on a timer without an interactive session
+- **Scheduled tasks / cron jobs** — handler-kind scripts run on a timer without an interactive session
 - **Pipeline integration** — pipe prompts through `claude -p` in shell scripts
 - **Daemon-driven execution** — a background service can invoke caps via `claude -p --project-dir <dir>`
 
@@ -176,16 +248,9 @@ CREATE TABLE cap_<name>__blobs (
 );
 ```
 
-### Empty Database Section
+### Stateless Caps
 
-If a cap uses no persistent storage, include the heading with empty content:
-
-```markdown
-## Database
-
-```
-
-This signals explicitly that the cap is stateless.
+If a cap uses no persistent storage, omit the `## Database` section entirely. The absence of the heading signals a stateless cap. Renderers must not emit an empty `## Database` heading.
 
 ## 5. Actions Section
 
@@ -262,11 +327,15 @@ Each capability lives in its own directory. The directory name must match the `n
 1. Frontmatter is extracted between the first pair of `---` lines
 2. Sections are identified by `## <Name>` headings (case-sensitive)
 3. Code blocks are extracted from within their section by matching ` ``` ` fences
-4. The first code block in the Script section is the handler
-5. The first code block in the Database section (if any) contains the schema
-6. The Actions section is parsed into a `map[string]string` of `### <Name>` subsections to their content
-7. Unknown sections are preserved but not interpreted
-8. Markdown formatting within sections is preserved verbatim
+4. The Scripts section contains one or more `### <name>` subsections, each defining one callable script
+5. Within a script subsection, optional `key: value` lines between the `### <name>` heading and the first code fence are inline metadata (`kind`, `runtime`, `schema`)
+6. The first code block following the inline metadata is the script body
+7. Inline metadata defaults: `kind: tool`, `runtime` derived from code fence language
+8. The first code block in the Database section (if any) contains the schema
+9. The Actions section is parsed into a `map[string]string` of `### <Name>` subsections to their content
+10. Unknown sections are preserved but not interpreted
+11. Markdown formatting within sections is preserved verbatim
+12. Script names within one cap must be unique
 
 ## What Doesn't Belong in the Format
 
