@@ -3,30 +3,18 @@ name: telegram
 description: Send messages via Telegram Bot API
 version: "1.0"
 tags: messaging, telegram, notifications
-runtime: repl
 requires: [store, web]
-schema:
-  input:
-    chat_id:
-      type: string
-      required: true
-      description: Telegram chat ID to send to
-    text:
-      type: string
-      required: true
-      description: Message text (Markdown supported)
-  output:
-    ok:
-      type: boolean
-    message_id:
-      type: number
 ---
 
 ## Purpose
 
 Send a message to a Telegram chat via the Bot API. Requires a bot token stored in cap_store config table.
 
-## Script
+## Scripts
+
+### telegram
+kind: tool
+schema: {"type":"object","properties":{"chat_id":{"type":"string","description":"Telegram chat ID to send to"},"text":{"type":"string","description":"Message text (Markdown supported)"}},"required":["chat_id","text"]}
 
 ```javascript
 async function handler({ chat_id, text }) {

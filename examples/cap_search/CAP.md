@@ -22,7 +22,10 @@ score > 100", "show me the last 10 search results".
 Pass `all: true` to auto-loop pagination and collect every matching row
 (up to `max_rows`, default 2000).
 
-## Script
+## Scripts
+
+### cap_search
+kind: tool
 
 ```javascript
 async ({cap, table, where, args, limit, offset, all, max_rows}) => {

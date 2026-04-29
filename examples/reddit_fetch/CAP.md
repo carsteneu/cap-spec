@@ -7,7 +7,6 @@ tags:
   - reddit
   - fetch
   - structured-storage
-runtime: repl
 tested: true
 requires:
   - store
@@ -30,7 +29,10 @@ without hitting shell output limits.
 Accepts URLs with or without `reddit:` prefix. Pass `max_comments` to limit
 comment extraction.
 
-## Script
+## Scripts
+
+### reddit_fetch
+kind: tool
 
 ```javascript
 async ({url, max_comments}) => {

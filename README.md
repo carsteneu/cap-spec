@@ -6,9 +6,9 @@ An open format for defining portable, reusable AI tool capabilities.
 
 A CAP.md file defines a single tool that an AI coding assistant can use. It contains:
 
-- **Metadata** (YAML frontmatter) — name, description, tags, runtime
+- **Metadata** (YAML frontmatter) — name, description, tags, requires, tested
 - **Purpose** — what the tool does and when to use it
-- **Script** — executable code (JavaScript or Bash)
+- **Scripts** — one or more named tools/handlers (JavaScript or Bash), each with its own kind/runtime/schema metadata
 - **Database** — optional SQL schema for persistent storage
 - **Actions** — optional named workflows (e.g. `### Setup` for first-run configuration)
 
@@ -26,14 +26,16 @@ A minimal capability (`hello/CAP.md`):
 ---
 name: hello
 description: Say hello to a user by name.
-runtime: repl
 ---
 
 ## Purpose
 
 Greets the user. Pass `name` to personalize the greeting.
 
-## Script
+## Scripts
+
+### hello
+kind: tool
 
 ```javascript
 async ({ name }) => {
@@ -49,7 +51,7 @@ async ({ name }) => {
 
 ## Prerequisites
 
-For `runtime: repl` capabilities, the AI coding assistant must support a JavaScript REPL VM.
+For scripts with `runtime: repl`, the AI coding assistant must support a JavaScript REPL VM.
 
 **Claude Code:** Set `CLAUDE_CODE_REPL=true` in the `env` block of your `settings.json`:
 
@@ -65,7 +67,7 @@ See the [Claude Code REPL documentation](https://docs.anthropic.com/en/docs/clau
 
 **Tool availability under REPL mode:** Classic tools (`Read`, `Bash`, `Grep`, `Glob`) become REPL-internal shorthands (`cat()`, `sh()`, `rg()`, `gl()`). `Edit` and `Write` remain top-level. Cap scripts run inside the REPL VM with access to all shorthands plus adapter primitives.
 
-For `runtime: bash` capabilities, no special configuration is needed.
+For scripts with `runtime: bash`, no special configuration is needed.
 
 ### Headless / Automation
 

@@ -5,7 +5,6 @@ version: 3
 tags:
   - ops
   - deploy
-runtime: bash
 tested: true
 ---
 
@@ -19,7 +18,11 @@ Use when you've finished a feature or fix and want to deploy it.
 Optional parameter `worktree` overrides which directory to build from
 (defaults to the current working directory).
 
-## Script
+## Scripts
+
+### deploy
+kind: tool
+schema: {"type":"object"}
 
 ```bash
 cd "${WORKTREE:-.}" && make deploy
