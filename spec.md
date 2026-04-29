@@ -146,7 +146,16 @@ Between the `### <name>` heading and the code fence, optional `key: value` lines
 |-------|------|---------|-------------|
 | `kind` | `"tool"` \| `"handler"` | `"tool"` | How the script is invoked. **Tools** are registered as MCP tools and called by AI assistants. **Handlers** run via the scheduler/cron and are not exposed to AI assistants. |
 | `runtime` | `"repl"` \| `"bash"` | derived from code fence | Execution environment. Override only when the code fence cannot disambiguate (rare). |
-| `schema` | JSON | derived from JS signature | JSON Schema for tool input parameters. Tool-kind scripts only. |
+| `schema` | JSON (single line) | derived from JS signature (REPL only) | JSON Schema for tool input parameters. Tool-kind scripts only. |
+
+**Metadata block rules:**
+
+- The block starts on the line immediately after `### <name>`.
+- The block consists of contiguous `key: value` lines. The first blank line, prose line, or code fence ends the block.
+- `schema` must be a single-line JSON object (no embedded newlines). For schemas too complex to fit on one line, derive from the JavaScript signature (REPL) or split the script into multiple smaller scripts.
+- Unknown keys in the metadata block cause a parse error. Implementations must not silently ignore unrecognized fields.
+- For `kind: tool` with `runtime: bash`, the `schema` field is required — bash has no signature to derive from.
+- For `kind: handler`, the `schema` field is invalid (handlers are not invoked with structured arguments). Setting it is a parse error.
 
 ### Script Naming
 
@@ -154,7 +163,7 @@ Script names follow cap name rules: lowercase, digits, underscores; must start w
 
 For **tool**-kind scripts, the name becomes the MCP tool identifier (e.g., `reddit_fetch`, `telegram_send`). Within one cap, all script names must be unique.
 
-For **handler**-kind scripts, the name is the reference used by the scheduler in the `cap_handler` field of a scheduled job.
+For **handler**-kind scripts, the scheduler resolves a handler reference by `(cap_name, script_name)`. A scheduled job stores both: the cap directory and the script subsection name. At fire time, the runtime loads the cap, finds the matching `### <script_name>` subsection, and executes its body. Naming a non-existent script in a scheduled job is a runtime error, not a parse error (the cap may parse successfully even if a downstream scheduler entry is stale).
 
 ### REPL Runtime (`runtime: repl`)
 
@@ -337,7 +346,77 @@ Each capability lives in its own directory. The directory name must match the `n
 11. Markdown formatting within sections is preserved verbatim
 12. Script names within one cap must be unique
 
-## What Doesn't Belong in the Format
+## Validation
+
+A parser must reject a CAP.md as invalid if any of the following hold. Errors are fatal — implementations must not auto-correct or fall back to defaults.
+
+| Condition | Error |
+|-----------|-------|
+| Frontmatter `name` field missing or empty | required field missing |
+| Frontmatter `name` does not match the parent directory name | name/directory mismatch |
+| `## Scripts` section missing | required section missing |
+| `## Scripts` section contains zero `### <name>` subsections | empty Scripts |
+| Two `### <name>` subsections share the same name within one cap | duplicate script name |
+| `### <name>` subsection contains zero code fences | missing script body |
+| `### <name>` subsection contains more than one code fence | ambiguous script body |
+| Inline metadata contains an unknown key | unknown metadata key |
+| Inline metadata `kind` is not `tool` or `handler` | invalid kind value |
+| Inline metadata `runtime` is not `repl` or `bash` | invalid runtime value |
+| Code fence language conflicts with explicit `runtime` value | runtime mismatch |
+| `kind: tool` with `runtime: bash` and no `schema` field | missing schema for bash tool |
+| `kind: handler` with a `schema` field | invalid schema on handler |
+
+A parser may accept these without error (they are warnings or silently preserved):
+
+- Unknown sections at the `##` level (preserved verbatim, ignored semantically)
+- Markdown content between sections (preserved as prose)
+- Trailing whitespace and blank lines
+
+## Migration from v1.0
+
+A v1.0 single-script CAP.md migrates to v1.1 by wrapping the existing `## Script` block in a `## Scripts` / `### <cap_name>` subsection:
+
+**v1.0:**
+
+````markdown
+---
+name: reddit_fetch
+runtime: repl
+schema: {"type":"object","properties":{"url":{"type":"string"}}}
+---
+
+## Purpose
+Fetch a Reddit URL.
+
+## Script
+```javascript
+async ({ url }) => { ... }
+```
+````
+
+**v1.1:**
+
+````markdown
+---
+name: reddit_fetch
+---
+
+## Purpose
+Fetch a Reddit URL.
+
+## Scripts
+
+### reddit_fetch
+kind: tool
+
+```javascript
+async ({ url }) => { ... }
+```
+````
+
+The cap-level `runtime` and `schema` fields are removed (now per-script and derived). The script subsection name conventionally matches the cap name. There is no parser fallback for the v1.0 form: a v1.1 parser rejects v1.0 files with an "## Scripts section missing" error.
+
+
 
 - **Tests** — belong in the script itself or in a separate test harness
 - **Dependencies** — caps use the runtime's built-in utilities; if more is needed, use a classic plugin/skill
