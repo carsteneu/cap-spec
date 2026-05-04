@@ -147,6 +147,7 @@ Between the `### <name>` heading and the code fence, optional `key: value` lines
 | `kind` | `"tool"` \| `"handler"` | `"tool"` | How the script is invoked. **Tools** are registered as MCP tools and called by AI assistants. **Handlers** run via the scheduler/cron and are not exposed to AI assistants. |
 | `runtime` | `"repl"` \| `"bash"` | derived from code fence | Execution environment. Override only when the code fence cannot disambiguate (rare). |
 | `schema` | JSON (single line) | derived from JS signature (REPL only) | JSON Schema for tool input parameters. Tool-kind scripts only. |
+| `sandbox` | `"none"` \| `"standard"` \| `"strict"` | scheduler default (typically `"standard"`) | Sandbox profile for handler-kind scripts fired by the scheduler. Tool-kind scripts ignore this field — tools execute in the caller REPL, not through the daemon's sandbox wrapper. `"none"` skips firejail/ai-jail wrapping and is intended for trusted local-only loops (high-frequency polling against fixed egress, deterministic shell pipelines) where wrapper overhead matters. Project-scope caps cannot declare `sandbox: "none"`; see the metadata block rules below. |
 
 **Metadata block rules:**
 
@@ -156,6 +157,7 @@ Between the `### <name>` heading and the code fence, optional `key: value` lines
 - Unknown keys in the metadata block cause a parse error. Implementations must not silently ignore unrecognized fields.
 - For `kind: tool` with `runtime: bash`, the `schema` field is required — bash has no signature to derive from.
 - For `kind: handler`, the `schema` field is invalid (handlers are not invoked with structured arguments). Setting it is a parse error.
+- `sandbox: "none"` is rejected when the surrounding cap declares `scope: project`. Project-scope caps live in a worktree and the trust boundary is not the cap author; opting out of sandboxing would let untrusted cap code wipe the worktree without confinement. Global-scope caps may set `sandbox: "none"` freely.
 
 ### Script Naming
 
